@@ -1,6 +1,9 @@
+import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Chess } from "chess.js";
+import { InteractiveBoard } from "./InteractiveBoard";
 
 interface TacticCardProps {
   fen: string;
@@ -11,6 +14,9 @@ interface TacticCardProps {
 }
 
 export const TacticCard = ({ fen, solution, difficulty, gameUrl, index }: TacticCardProps) => {
+  const [attempts, setAttempts] = useState(0);
+  const [solved, setSolved] = useState(false);
+  
   const difficultyColors = {
     easy: "bg-green-500/20 text-green-700 dark:text-green-400",
     medium: "bg-yellow-500/20 text-yellow-700 dark:text-yellow-400",
@@ -41,8 +47,10 @@ export const TacticCard = ({ fen, solution, difficulty, gameUrl, index }: Tactic
                 }`}
               >
                 {piece && (
-                  <span className={isWhitePiece ? 'text-[#f0e9dc]' : 'text-[#1a1a1a]'} style={{
-                    filter: isWhitePiece ? 'drop-shadow(0 1px 2px rgba(0,0,0,0.3))' : 'drop-shadow(0 1px 2px rgba(255,255,255,0.2))'
+                  <span className={isWhitePiece ? 'text-white' : 'text-black'} style={{
+                    filter: isWhitePiece 
+                      ? 'drop-shadow(0 2px 3px rgba(0,0,0,0.8))' 
+                      : 'drop-shadow(0 2px 3px rgba(255,255,255,0.5))'
                   }}>
                     {piece}
                   </span>
@@ -67,25 +75,41 @@ export const TacticCard = ({ fen, solution, difficulty, gameUrl, index }: Tactic
         <CardDescription>Find the best move</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {renderBoard()}
-        <details className="text-sm">
-          <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
-            Show solution
-          </summary>
-          <div className="mt-2 space-y-1">
-            <p className="font-mono text-xs bg-muted p-2 rounded">
-              {solution.join(' → ')}
-            </p>
-            <a
-              href={gameUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary hover:underline text-xs"
-            >
-              View full game ↗
-            </a>
-          </div>
-        </details>
+        <Tabs defaultValue="view" className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="view">View</TabsTrigger>
+            <TabsTrigger value="play">Play {solved && "✓"}</TabsTrigger>
+          </TabsList>
+          <TabsContent value="view" className="space-y-4">
+            {renderBoard()}
+            <details className="text-sm">
+              <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+                Show solution
+              </summary>
+              <div className="mt-2 space-y-1">
+                <p className="font-mono text-xs bg-muted p-2 rounded">
+                  {solution.join(' → ')}
+                </p>
+                <a
+                  href={gameUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline text-xs"
+                >
+                  View full game ↗
+                </a>
+              </div>
+            </details>
+          </TabsContent>
+          <TabsContent value="play">
+            <InteractiveBoard
+              initialFen={fen}
+              solution={solution}
+              onCorrect={() => setSolved(true)}
+              onWrong={() => setAttempts(attempts + 1)}
+            />
+          </TabsContent>
+        </Tabs>
       </CardContent>
     </Card>
   );
