@@ -20,9 +20,13 @@ const Index = () => {
         description: `Loading ${gameCount} games from ${platform}`,
       });
 
-      const games = platform === "chess.com" 
+      console.log('Starting to fetch games for:', username, platform, gameCount);
+
+      const games = platform === "chess.com"
         ? await fetchChessComGames(username, gameCount)
         : await fetchLichessGames(username, gameCount);
+
+      console.log('Fetched games:', games.length);
 
       if (games.length === 0) {
         toast({
@@ -41,6 +45,8 @@ const Index = () => {
 
       const generatedTactics = generateTactics(games);
 
+      console.log('Generated tactics:', generatedTactics.length);
+
       if (generatedTactics.length === 0) {
         toast({
           title: "No tactics found",
@@ -55,6 +61,7 @@ const Index = () => {
         });
       }
     } catch (error) {
+      console.error('Error in handleSubmit:', error);
       toast({
         title: "Error",
         description: error instanceof Error ? error.message : "Failed to fetch games",
