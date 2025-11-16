@@ -17,7 +17,7 @@ export const InteractiveBoard = ({ initialFen, solution, onCorrect, onWrong }: I
   const [showingSolution, setShowingSolution] = useState(false);
 
   const pieceSymbols: { [key: string]: string } = {
-    'p': '♟', 'n': '♞', 'b': '♝', 'r': '♜', 'q': '♛', 'k': '♚',
+    'p': '♟', 'n': '♘', 'b': '♗', 'r': '♜', 'q': '♕', 'k': '♚',
     'P': '♙', 'N': '♘', 'B': '♗', 'R': '♖', 'Q': '♕', 'K': '♔'
   };
 
@@ -119,9 +119,12 @@ export const InteractiveBoard = ({ initialFen, solution, onCorrect, onWrong }: I
               >
                 {piece && (
                   <span className={isWhitePiece ? 'text-white' : 'text-black'} style={{
-                    filter: isWhitePiece 
-                      ? 'drop-shadow(0 2px 3px rgba(0,0,0,0.8))' 
-                      : 'drop-shadow(0 2px 3px rgba(255,255,255,0.5))'
+                    filter: isWhitePiece
+                      ? 'drop-shadow(1px 1px 2px rgba(0,0,0,0.8))'
+                      : 'drop-shadow(1px 1px 2px rgba(255,255,255,0.8))',
+                    textShadow: isWhitePiece
+                      ? '1px 1px 0 rgba(0,0,0,0.8)'
+                      : '1px 1px 0 rgba(255,255,255,0.8)'
                   }}>
                     {piece}
                   </span>

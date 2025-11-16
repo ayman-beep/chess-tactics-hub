@@ -5,6 +5,7 @@ export interface Tactic {
   solution: string[];
   difficulty: "easy" | "medium" | "hard";
   gameUrl: string;
+  evaluation: number;
 }
 
 const pieceValues: { [key: string]: number } = {
@@ -188,11 +189,11 @@ export const generateTactics = (games: any[]): Tactic[] => {
           // Generate the full solution line
           const solution: string[] = [];
           const solutionChess = new Chess(fenBefore);
-          
+
           // Add the key tactical move
           solutionChess.move(actualMove);
           solution.push(actualMove.san);
-          
+
           // Add the likely response and continuation
           const continuation = findBestLine(solutionChess, 2);
           for (let k = 0; k < Math.min(3, continuation.moves.length); k++) {
@@ -201,16 +202,22 @@ export const generateTactics = (games: any[]): Tactic[] => {
               solutionChess.move(continuation.moves[k]);
             }
           }
-          
+
+          // Calculate the evaluation change from this tactical sequence
+          const evalBefore = evaluatePosition(new Chess(fenBefore));
+          const evalAfter = evaluatePosition(solutionChess);
+          const evaluation = evalAfter - evalBefore;
+
           tactics.push({
             fen: fenBefore,
             solution: solution.slice(0, 4), // Limit to 4 moves
             difficulty: tacticalInfo.difficulty,
-            gameUrl: game.url
+            gameUrl: game.url,
+            evaluation: evaluation
           });
-          
+
           seenPositions.add(fenBefore);
-          
+
           // Limit tactics per game
           if (tactics.length >= 15) break;
         }

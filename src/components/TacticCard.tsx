@@ -11,11 +11,17 @@ interface TacticCardProps {
   difficulty: "easy" | "medium" | "hard";
   gameUrl: string;
   index: number;
+  evaluation: number;
 }
 
-export const TacticCard = ({ fen, solution, difficulty, gameUrl, index }: TacticCardProps) => {
+export const TacticCard = ({ fen, solution, difficulty, gameUrl, index, evaluation }: TacticCardProps) => {
   const [attempts, setAttempts] = useState(0);
   const [solved, setSolved] = useState(false);
+
+  const formatEvaluation = (value: number) => {
+    const absEval = Math.abs(value).toFixed(1);
+    return value > 0 ? `+${absEval}` : `${absEval}`;
+  };
   
   const difficultyColors = {
     easy: "bg-green-500/20 text-green-700 dark:text-green-400",
@@ -27,7 +33,7 @@ export const TacticCard = ({ fen, solution, difficulty, gameUrl, index }: Tactic
     const chess = new Chess(fen);
     const board = chess.board();
     const pieceSymbols: { [key: string]: string } = {
-      'p': '♟', 'n': '♞', 'b': '♝', 'r': '♜', 'q': '♛', 'k': '♚',
+      'p': '♟', 'n': '♘', 'b': '♗', 'r': '♜', 'q': '♕', 'k': '♚',
       'P': '♙', 'N': '♘', 'B': '♗', 'R': '♖', 'Q': '♕', 'K': '♔'
     };
 
@@ -48,9 +54,12 @@ export const TacticCard = ({ fen, solution, difficulty, gameUrl, index }: Tactic
               >
                 {piece && (
                   <span className={isWhitePiece ? 'text-white' : 'text-black'} style={{
-                    filter: isWhitePiece 
-                      ? 'drop-shadow(0 2px 3px rgba(0,0,0,0.8))' 
-                      : 'drop-shadow(0 2px 3px rgba(255,255,255,0.5))'
+                    filter: isWhitePiece
+                      ? 'drop-shadow(1px 1px 2px rgba(0,0,0,0.8))'
+                      : 'drop-shadow(1px 1px 2px rgba(255,255,255,0.8))',
+                    textShadow: isWhitePiece
+                      ? '1px 1px 0 rgba(0,0,0,0.8)'
+                      : '1px 1px 0 rgba(255,255,255,0.8)'
                   }}>
                     {piece}
                   </span>
@@ -68,9 +77,14 @@ export const TacticCard = ({ fen, solution, difficulty, gameUrl, index }: Tactic
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle className="text-lg">Tactic #{index + 1}</CardTitle>
-          <Badge className={difficultyColors[difficulty]}>
-            {difficulty}
-          </Badge>
+          <div className="flex gap-2">
+            <Badge className={difficultyColors[difficulty]}>
+              {difficulty}
+            </Badge>
+            <Badge variant="outline" className="font-mono">
+              {formatEvaluation(evaluation)}
+            </Badge>
+          </div>
         </div>
         <CardDescription>Find the best move</CardDescription>
       </CardHeader>
