@@ -7,81 +7,158 @@ export interface Tactic {
   gameUrl: string;
 }
 
+const pieceValues: { [key: string]: number } = {
+  p: 1, n: 3, b: 3, r: 5, q: 9, k: 0
+};
+
 const evaluatePosition = (chess: Chess): number => {
-  const pieceValues: { [key: string]: number } = {
-    p: 1, n: 3, b: 3, r: 5, q: 9, k: 0
-  };
-  
   let score = 0;
   const board = chess.board();
   
-  board.forEach(row => {
-    row.forEach(square => {
+  board.forEach((row, rank) => {
+    row.forEach((square, file) => {
       if (square) {
-        const value = pieceValues[square.type];
+        let value = pieceValues[square.type];
+        
+        // Add positional bonuses
+        if (square.type === 'p') {
+          // Pawns are worth more when advanced
+          const advancementBonus = square.color === 'w' ? (6 - rank) * 0.1 : rank * 0.1;
+          value += advancementBonus;
+        }
+        
+        // Center control bonus
+        if ((rank === 3 || rank === 4) && (file === 3 || file === 4)) {
+          value += 0.3;
+        }
+        
         score += square.color === 'w' ? value : -value;
       }
     });
   });
   
+  // King safety penalty if in check
+  if (chess.inCheck()) {
+    score += chess.turn() === 'w' ? -2 : 2;
+  }
+  
   return score;
 };
 
-const findBestMove = (chess: Chess, depth: number = 2): { move: any; score: number } | null => {
-  const moves = chess.moves({ verbose: true });
-  if (moves.length === 0) return null;
+const getMaterialCount = (chess: Chess, color: 'w' | 'b'): number => {
+  let material = 0;
+  const board = chess.board();
   
-  let bestMove = moves[0];
-  let bestScore = -Infinity;
+  board.forEach(row => {
+    row.forEach(square => {
+      if (square && square.color === color) {
+        material += pieceValues[square.type];
+      }
+    });
+  });
   
-  for (const move of moves) {
-    chess.move(move);
-    const score = -minimax(chess, depth - 1, -Infinity, Infinity, false);
-    chess.undo();
-    
-    if (score > bestScore) {
-      bestScore = score;
-      bestMove = move;
-    }
-  }
-  
-  return { move: bestMove, score: bestScore };
+  return material;
 };
 
-const minimax = (chess: Chess, depth: number, alpha: number, beta: number, isMaximizing: boolean): number => {
+const findBestLine = (chess: Chess, depth: number = 3): { moves: any[]; score: number } => {
+  const result = minimax(chess, depth, -Infinity, Infinity, true, []);
+  return result;
+};
+
+const minimax = (
+  chess: Chess, 
+  depth: number, 
+  alpha: number, 
+  beta: number, 
+  isMaximizing: boolean,
+  currentLine: any[]
+): { moves: any[]; score: number } => {
+  
   if (depth === 0 || chess.isGameOver()) {
-    return evaluatePosition(chess);
+    return { moves: currentLine, score: evaluatePosition(chess) };
   }
   
   const moves = chess.moves({ verbose: true });
   
-  if (isMaximizing) {
-    let maxScore = -Infinity;
-    for (const move of moves) {
-      chess.move(move);
-      const score = minimax(chess, depth - 1, alpha, beta, false);
-      chess.undo();
-      maxScore = Math.max(maxScore, score);
-      alpha = Math.max(alpha, score);
-      if (beta <= alpha) break;
+  // Prioritize forcing moves (checks and captures)
+  moves.sort((a, b) => {
+    const aScore = (a.captured ? pieceValues[a.captured] * 10 : 0) + 
+                   (a.flags.includes('c') ? 100 : 0) + // Check
+                   (a.flags.includes('p') ? 50 : 0);   // Promotion
+    const bScore = (b.captured ? pieceValues[b.captured] * 10 : 0) + 
+                   (b.flags.includes('c') ? 100 : 0) + 
+                   (b.flags.includes('p') ? 50 : 0);
+    return bScore - aScore;
+  });
+  
+  let bestLine = { moves: currentLine, score: isMaximizing ? -Infinity : Infinity };
+  
+  for (const move of moves.slice(0, Math.max(10, moves.length))) {
+    chess.move(move);
+    const result = minimax(chess, depth - 1, alpha, beta, !isMaximizing, [...currentLine, move]);
+    chess.undo();
+    
+    if (isMaximizing) {
+      if (result.score > bestLine.score) {
+        bestLine = result;
+      }
+      alpha = Math.max(alpha, result.score);
+    } else {
+      if (result.score < bestLine.score) {
+        bestLine = result;
+      }
+      beta = Math.min(beta, result.score);
     }
-    return maxScore;
-  } else {
-    let minScore = Infinity;
-    for (const move of moves) {
-      chess.move(move);
-      const score = minimax(chess, depth - 1, alpha, beta, true);
-      chess.undo();
-      minScore = Math.min(minScore, score);
-      beta = Math.min(beta, score);
-      if (beta <= alpha) break;
-    }
-    return minScore;
+    
+    if (beta <= alpha) break;
   }
+  
+  return bestLine;
+};
+
+const isTacticalPosition = (chess: Chess, move: any): { isTactical: boolean; materialGain: number; difficulty: "easy" | "medium" | "hard" } => {
+  const beforeMaterial = getMaterialCount(chess, chess.turn());
+  const beforeEval = evaluatePosition(chess);
+  const isCheck = move.flags.includes('c') || move.flags.includes('+') || move.san.includes('+');
+  const isCapture = !!move.captured;
+  
+  chess.move(move);
+  
+  // Look ahead to see if this leads to material gain
+  const response = findBestLine(chess, 2);
+  const afterEval = -response.score; // Negate because perspective flipped
+  
+  chess.undo();
+  
+  const evalSwing = afterEval - beforeEval;
+  const materialGain = isCapture ? pieceValues[move.captured] : 0;
+  
+  // A position is tactical if:
+  // 1. It's a check that leads to advantage
+  // 2. It's a capture that wins material
+  // 3. It creates a forcing sequence with significant eval swing
+  // 4. It leads to checkmate threats
+  
+  const isTactical = (
+    (isCheck && evalSwing > 1) ||
+    (isCapture && evalSwing > 1.5) ||
+    (evalSwing > 2.5) ||
+    chess.isCheckmate()
+  );
+  
+  let difficulty: "easy" | "medium" | "hard" = "easy";
+  if (evalSwing > 5 || (isCheck && isCapture)) {
+    difficulty = "hard";
+  } else if (evalSwing > 3 || isCheck) {
+    difficulty = "medium";
+  }
+  
+  return { isTactical, materialGain, difficulty };
 };
 
 export const generateTactics = (games: any[]): Tactic[] => {
   const tactics: Tactic[] = [];
+  const seenPositions = new Set<string>();
   
   games.forEach(game => {
     try {
@@ -90,52 +167,52 @@ export const generateTactics = (games: any[]): Tactic[] => {
       
       const history = chess.history({ verbose: true });
       
-      // Look for tactical positions every 5-8 moves
-      for (let i = 10; i < history.length - 5; i += Math.floor(Math.random() * 4) + 5) {
+      // Analyze each move in the game
+      for (let i = 8; i < history.length - 3; i++) {
         chess.reset();
         
-        // Replay to this position
+        // Replay to the position BEFORE the tactical move
         for (let j = 0; j < i; j++) {
           chess.move(history[j]);
         }
         
-        const currentEval = evaluatePosition(chess);
-        const result = findBestMove(chess, 2);
+        const fenBefore = chess.fen();
         
-        if (!result) continue;
+        // Skip if we've seen this position
+        if (seenPositions.has(fenBefore)) continue;
         
-        chess.move(result.move);
-        const newEval = evaluatePosition(chess);
-        const evalDiff = Math.abs(newEval - currentEval);
+        const actualMove = history[i];
+        const tacticalInfo = isTacticalPosition(chess, actualMove);
         
-        // If the move significantly changes the evaluation, it's likely tactical
-        if (evalDiff > 2) {
-          const fen = chess.fen();
-          chess.undo();
+        if (tacticalInfo.isTactical) {
+          // Generate the full solution line
+          const solution: string[] = [];
+          const solutionChess = new Chess(fenBefore);
           
-          // Generate solution line
-          const solution = [result.move.san];
-          chess.move(result.move);
+          // Add the key tactical move
+          solutionChess.move(actualMove);
+          solution.push(actualMove.san);
           
-          const nextBest = findBestMove(chess, 1);
-          if (nextBest) {
-            solution.push(nextBest.move.san);
+          // Add the likely response and continuation
+          const continuation = findBestLine(solutionChess, 2);
+          for (let k = 0; k < Math.min(3, continuation.moves.length); k++) {
+            if (continuation.moves[k]) {
+              solution.push(continuation.moves[k].san);
+              solutionChess.move(continuation.moves[k]);
+            }
           }
           
-          const difficulty = evalDiff > 5 ? "hard" : evalDiff > 3 ? "medium" : "easy";
-          
           tactics.push({
-            fen: fen,
-            solution,
-            difficulty,
+            fen: fenBefore,
+            solution: solution.slice(0, 4), // Limit to 4 moves
+            difficulty: tacticalInfo.difficulty,
             gameUrl: game.url
           });
           
-          // Reset for next iteration
-          chess.reset();
-          for (let j = 0; j < i; j++) {
-            chess.move(history[j]);
-          }
+          seenPositions.add(fenBefore);
+          
+          // Limit tactics per game
+          if (tactics.length >= 15) break;
         }
       }
     } catch (error) {
@@ -143,6 +220,11 @@ export const generateTactics = (games: any[]): Tactic[] => {
     }
   });
   
-  // Return up to 10 unique tactics
+  // Sort by difficulty and return up to 10 best tactics
+  tactics.sort((a, b) => {
+    const difficultyOrder = { hard: 3, medium: 2, easy: 1 };
+    return difficultyOrder[b.difficulty] - difficultyOrder[a.difficulty];
+  });
+  
   return tactics.slice(0, 10);
 };
