@@ -31,7 +31,7 @@ export const TacticCard = ({ fen, solution, difficulty, gameUrl, index }: Tactic
           row.map((square, j) => {
             const isLight = (i + j) % 2 === 0;
             const piece = square ? pieceSymbols[square.type === square.type.toLowerCase() ? square.type : square.type.toUpperCase()] : null;
-            const isDark = square && square.color === 'b';
+            const isWhitePiece = square && square.color === 'w';
             
             return (
               <div
@@ -41,7 +41,9 @@ export const TacticCard = ({ fen, solution, difficulty, gameUrl, index }: Tactic
                 }`}
               >
                 {piece && (
-                  <span className={isDark ? 'opacity-100' : 'opacity-90'}>
+                  <span className={isWhitePiece ? 'text-[#f0e9dc]' : 'text-[#1a1a1a]'} style={{
+                    filter: isWhitePiece ? 'drop-shadow(0 1px 2px rgba(0,0,0,0.3))' : 'drop-shadow(0 1px 2px rgba(255,255,255,0.2))'
+                  }}>
                     {piece}
                   </span>
                 )}
