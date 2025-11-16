@@ -14,6 +14,7 @@ export const InteractiveBoard = ({ initialFen, solution, onCorrect, onWrong }: I
   const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
   const [currentMoveIndex, setCurrentMoveIndex] = useState(0);
   const [message, setMessage] = useState("Your turn! Make the best move.");
+  const [showingSolution, setShowingSolution] = useState(false);
 
   const pieceSymbols: { [key: string]: string } = {
     'p': '♟', 'n': '♞', 'b': '♝', 'r': '♜', 'q': '♛', 'k': '♚',
@@ -25,6 +26,21 @@ export const InteractiveBoard = ({ initialFen, solution, onCorrect, onWrong }: I
     setSelectedSquare(null);
     setCurrentMoveIndex(0);
     setMessage("Your turn! Make the best move.");
+    setShowingSolution(false);
+  };
+
+  const showSolution = () => {
+    setShowingSolution(true);
+    const solutionChess = new Chess(initialFen);
+    
+    // Play through the entire solution
+    solution.forEach(move => {
+      solutionChess.move(move);
+    });
+    
+    setChess(solutionChess);
+    setMessage(`Solution: ${solution.join(' → ')}`);
+    setCurrentMoveIndex(solution.length);
   };
 
   const makeMove = (from: string, to: string) => {
@@ -116,9 +132,14 @@ export const InteractiveBoard = ({ initialFen, solution, onCorrect, onWrong }: I
         )}
       </div>
       
-      <Button onClick={reset} variant="outline" className="w-full">
-        Reset Position
-      </Button>
+      <div className="flex gap-2">
+        <Button onClick={reset} variant="outline" className="flex-1">
+          Reset
+        </Button>
+        <Button onClick={showSolution} variant="secondary" className="flex-1" disabled={showingSolution}>
+          Show Solution
+        </Button>
+      </div>
     </div>
   );
 };
