@@ -61,7 +61,7 @@ const getMaterialCount = (chess: Chess, color: 'w' | 'b'): number => {
   return material;
 };
 
-const findBestLine = (chess: Chess, depth: number = 3): { moves: any[]; score: number } => {
+const findBestLine = (chess: Chess, depth: number = 6): { moves: any[]; score: number } => {
   const result = minimax(chess, depth, -Infinity, Infinity, true, []);
   return result;
 };
@@ -125,8 +125,8 @@ const isTacticalPosition = (chess: Chess, move: any): { isTactical: boolean; mat
   
   chess.move(move);
   
-  // Look ahead to see if this leads to material gain
-  const response = findBestLine(chess, 2);
+  // Look ahead to see if this leads to material gain - use depth 6 for accurate evaluation
+  const response = findBestLine(chess, 6);
   const afterEval = -response.score; // Negate because perspective flipped
   
   chess.undo();
@@ -194,8 +194,8 @@ export const generateTactics = (games: any[]): Tactic[] => {
           solutionChess.move(actualMove);
           solution.push(actualMove.san);
 
-          // Add the likely response and continuation
-          const continuation = findBestLine(solutionChess, 2);
+          // Add the likely response and continuation using depth 6 for accurate lines
+          const continuation = findBestLine(solutionChess, 6);
           for (let k = 0; k < Math.min(3, continuation.moves.length); k++) {
             if (continuation.moves[k]) {
               solution.push(continuation.moves[k].san);
