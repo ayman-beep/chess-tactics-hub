@@ -16,9 +16,10 @@ export const InteractiveBoard = ({ initialFen, solution, onCorrect, onWrong }: I
   const [message, setMessage] = useState("Your turn! Make the best move.");
   const [showingSolution, setShowingSolution] = useState(false);
 
+  // Use proper Unicode symbols - white pieces (filled) vs black pieces (outlined)
   const pieceSymbols: { [key: string]: string } = {
-    'p': '♟', 'n': '♘', 'b': '♗', 'r': '♜', 'q': '♕', 'k': '♚',
-    'P': '♙', 'N': '♘', 'B': '♗', 'R': '♖', 'Q': '♕', 'K': '♔'
+    'p': '♟︎', 'n': '♞', 'b': '♝', 'r': '♜', 'q': '♛', 'k': '♚',  // Black pieces
+    'P': '♙', 'N': '♘', 'B': '♗', 'R': '♖', 'Q': '♕', 'K': '♔'   // White pieces
   };
 
   const reset = () => {
@@ -100,32 +101,36 @@ export const InteractiveBoard = ({ initialFen, solution, onCorrect, onWrong }: I
     <div className="space-y-4">
       <div className="text-center font-medium">{message}</div>
       
-      <div className="grid grid-cols-8 gap-0 w-full max-w-[320px] mx-auto border-2 border-border rounded-lg overflow-hidden">
+      <div className="grid grid-cols-8 gap-0 w-full max-w-[320px] mx-auto border-2 border-border rounded-lg overflow-hidden shadow-lg">
         {board.map((row, i) =>
           row.map((square, j) => {
             const isLight = (i + j) % 2 === 0;
             const squareNotation = `${files[j]}${ranks[i]}`;
             const isSelected = selectedSquare === squareNotation;
-            const piece = square ? pieceSymbols[square.type === square.type.toLowerCase() ? square.type : square.type.toUpperCase()] : null;
             const isWhitePiece = square && square.color === 'w';
+            const piece = square ? pieceSymbols[square.type] : null;
             
             return (
               <button
                 key={`${i}-${j}`}
                 onClick={() => handleSquareClick(squareNotation, square)}
-                className={`aspect-square flex items-center justify-center text-4xl transition-colors ${
-                  isLight ? 'bg-secondary hover:bg-secondary/80' : 'bg-accent hover:bg-accent/80'
-                } ${isSelected ? 'ring-4 ring-primary' : ''}`}
+                disabled={showingSolution}
+                className={`aspect-square flex items-center justify-center text-4xl font-bold transition-colors ${
+                  isLight ? 'bg-[#f0d9b5]' : 'bg-[#b58863]'
+                } ${isSelected ? 'ring-4 ring-primary' : ''} ${
+                  showingSolution ? 'cursor-not-allowed' : 'hover:brightness-95'
+                }`}
               >
                 {piece && (
-                  <span className={isWhitePiece ? 'text-white' : 'text-black'} style={{
-                    filter: isWhitePiece
-                      ? 'drop-shadow(1px 1px 2px rgba(0,0,0,0.8))'
-                      : 'drop-shadow(1px 1px 2px rgba(255,255,255,0.8))',
-                    textShadow: isWhitePiece
-                      ? '1px 1px 0 rgba(0,0,0,0.8)'
-                      : '1px 1px 0 rgba(255,255,255,0.8)'
-                  }}>
+                  <span 
+                    className={isWhitePiece ? 'text-[#ffffff]' : 'text-[#000000]'}
+                    style={{
+                      filter: isWhitePiece
+                        ? 'drop-shadow(0 2px 3px rgba(0,0,0,0.5))'
+                        : 'drop-shadow(0 1px 2px rgba(0,0,0,0.3))',
+                      WebkitTextStroke: isWhitePiece ? '0.5px rgba(0,0,0,0.2)' : '0.5px rgba(0,0,0,0.4)'
+                    }}
+                  >
                     {piece}
                   </span>
                 )}
