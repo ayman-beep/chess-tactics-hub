@@ -1,31 +1,30 @@
+const CORS_PROXY = 'https://cors-anywhere.herokuapp.com/';
+
 export const fetchChessComGames = async (username: string, count: number): Promise<any[]> => {
   try {
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
 
-    const response = await fetch(
-      `${supabaseUrl}/functions/v1/fetch-chess-games`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${anonKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          username,
-          platform: 'chess.com',
-          count,
-        }),
+    const url = `https://api.chess.com/pub/player/${username}/games/${year}/${month}`;
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Chess Tactics Generator'
       }
-    );
+    });
 
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to fetch games from Chess.com');
+      throw new Error(`Chess.com API error: ${response.statusText}`);
     }
 
     const data = await response.json();
-    return data.games || [];
+    const games = data.games || [];
+
+    return games.slice(-count).map((game: any) => ({
+      pgn: game.pgn,
+      url: game.url,
+      platform: 'chess.com'
+    }));
   } catch (error) {
     console.error('Chess.com API error:', error);
     throw error;
@@ -34,32 +33,32 @@ export const fetchChessComGames = async (username: string, count: number): Promi
 
 export const fetchLichessGames = async (username: string, count: number): Promise<any[]> => {
   try {
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
     const response = await fetch(
-      `${supabaseUrl}/functions/v1/fetch-chess-games`,
+      `https://lichess.org/api/games/user/${username}?max=${count}&pgnInJson=true&sort=dateDesc`,
       {
-        method: 'POST',
         headers: {
-          'Authorization': `Bearer ${anonKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          username,
-          platform: 'lichess',
-          count,
-        }),
+          'Accept': 'application/x-ndjson',
+          'User-Agent': 'Chess Tactics Generator'
+        }
       }
     );
 
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to fetch games from Lichess');
+      throw new Error(`Lichess API error: ${response.statusText}`);
     }
 
-    const data = await response.json();
-    return data.games || [];
+    const text = await response.text();
+    const games = text
+      .trim()
+      .split('\n')
+      .filter(line => line.trim())
+      .map(line => JSON.parse(line));
+
+    return games.map((game: any) => ({
+      pgn: game.pgn,
+      url: `https://lichess.org/${game.id}`,
+      platform: 'lichess'
+    }));
   } catch (error) {
     console.error('Lichess API error:', error);
     throw error;
