@@ -32,35 +32,38 @@ export const TacticCard = ({ fen, solution, difficulty, gameUrl, index, evaluati
   const renderBoard = () => {
     const chess = new Chess(fen);
     const board = chess.board();
+    
+    // Use proper Unicode symbols - white pieces (filled) vs black pieces (outlined)
     const pieceSymbols: { [key: string]: string } = {
-      'p': '♟', 'n': '♘', 'b': '♗', 'r': '♜', 'q': '♕', 'k': '♚',
-      'P': '♙', 'N': '♘', 'B': '♗', 'R': '♖', 'Q': '♕', 'K': '♔'
+      'p': '♟︎', 'n': '♞', 'b': '♝', 'r': '♜', 'q': '♛', 'k': '♚',  // Black pieces
+      'P': '♙', 'N': '♘', 'B': '♗', 'R': '♖', 'Q': '♕', 'K': '♔'   // White pieces
     };
 
     return (
-      <div className="grid grid-cols-8 gap-0 w-full max-w-[320px] mx-auto border-2 border-border rounded-lg overflow-hidden">
+      <div className="grid grid-cols-8 gap-0 w-full max-w-[320px] mx-auto border-2 border-border rounded-lg overflow-hidden shadow-lg">
         {board.map((row, i) =>
           row.map((square, j) => {
             const isLight = (i + j) % 2 === 0;
-            const piece = square ? pieceSymbols[square.type === square.type.toLowerCase() ? square.type : square.type.toUpperCase()] : null;
             const isWhitePiece = square && square.color === 'w';
+            const piece = square ? pieceSymbols[square.type] : null;
             
             return (
               <div
                 key={`${i}-${j}`}
-                className={`aspect-square flex items-center justify-center text-4xl ${
-                  isLight ? 'bg-secondary' : 'bg-accent'
+                className={`aspect-square flex items-center justify-center text-4xl font-bold ${
+                  isLight ? 'bg-[#f0d9b5]' : 'bg-[#b58863]'
                 }`}
               >
                 {piece && (
-                  <span className={isWhitePiece ? 'text-white' : 'text-black'} style={{
-                    filter: isWhitePiece
-                      ? 'drop-shadow(1px 1px 2px rgba(0,0,0,0.8))'
-                      : 'drop-shadow(1px 1px 2px rgba(255,255,255,0.8))',
-                    textShadow: isWhitePiece
-                      ? '1px 1px 0 rgba(0,0,0,0.8)'
-                      : '1px 1px 0 rgba(255,255,255,0.8)'
-                  }}>
+                  <span 
+                    className={isWhitePiece ? 'text-[#ffffff]' : 'text-[#000000]'}
+                    style={{
+                      filter: isWhitePiece
+                        ? 'drop-shadow(0 2px 3px rgba(0,0,0,0.5))'
+                        : 'drop-shadow(0 1px 2px rgba(0,0,0,0.3))',
+                      WebkitTextStroke: isWhitePiece ? '0.5px rgba(0,0,0,0.2)' : '0.5px rgba(0,0,0,0.4)'
+                    }}
+                  >
                     {piece}
                   </span>
                 )}
