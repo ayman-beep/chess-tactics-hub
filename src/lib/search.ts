@@ -37,7 +37,7 @@ const orderMoves = (chess: Chess, moves: any[]): any[] => {
   .map(item => item.move);
 };
 
-export const findBestLine = (chess: Chess, depth: number = 12): { moves: any[]; score: number } => {
+export const findBestLine = (chess: Chess, depth: number = 8): { moves: any[]; score: number } => {
   const result = minimax(chess, depth, -Infinity, Infinity, chess.turn() === 'w', []);
   return result;
 };

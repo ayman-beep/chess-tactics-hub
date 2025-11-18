@@ -8,8 +8,6 @@ import { useToast } from "@/hooks/use-toast";
 const Index = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [tactics, setTactics] = useState<Tactic[]>([]);
-  const [analysisProgress, setAnalysisProgress] = useState(0);
-  const [analysisStatus, setAnalysisStatus] = useState("");
   const { toast } = useToast();
 
   const handleSubmit = async (username: string, platform: "chess.com" | "lichess", gameCount: number) => {
@@ -42,13 +40,10 @@ const Index = () => {
 
       toast({
         title: "Analyzing positions...",
-        description: "Starting multi-threaded analysis using all CPU cores",
+        description: "Generating tactical puzzles from your games",
       });
 
-      const generatedTactics = await generateTactics(games, (progress, status) => {
-        setAnalysisProgress(progress);
-        setAnalysisStatus(status);
-      });
+      const generatedTactics = generateTactics(games);
 
       console.log('Generated tactics:', generatedTactics.length);
 
@@ -62,12 +57,9 @@ const Index = () => {
         setTactics(generatedTactics);
         toast({
           title: "Success!",
-          description: `Generated ${generatedTactics.length} tactical puzzles using parallel analysis`,
+          description: `Generated ${generatedTactics.length} tactical puzzles`,
         });
       }
-      
-      setAnalysisProgress(0);
-      setAnalysisStatus("");
     } catch (error) {
       console.error('Error in handleSubmit:', error);
       toast({
@@ -95,24 +87,6 @@ const Index = () => {
         <div className="flex justify-center">
           <ChessForm onSubmit={handleSubmit} isLoading={isLoading} />
         </div>
-
-        {isLoading && analysisProgress > 0 && (
-          <div className="max-w-2xl mx-auto space-y-2 p-6 bg-card rounded-lg border">
-            <div className="flex justify-between text-sm text-muted-foreground">
-              <span>{analysisStatus}</span>
-              <span>{Math.round(analysisProgress)}%</span>
-            </div>
-            <div className="w-full bg-secondary rounded-full h-3 overflow-hidden">
-              <div 
-                className="bg-primary h-full transition-all duration-300 ease-out"
-                style={{ width: `${analysisProgress}%` }}
-              />
-            </div>
-            <p className="text-xs text-muted-foreground text-center">
-              Using 4 worker threads for optimized parallel analysis
-            </p>
-          </div>
-        )}
 
         {tactics.length > 0 && (
           <div className="space-y-4">
