@@ -109,7 +109,7 @@ const Index = () => {
               />
             </div>
             <p className="text-xs text-muted-foreground text-center">
-              Using 4 worker threads for optimized parallel analysis
+              Using all available CPU cores for maximum parallel analysis
             </p>
           </div>
         )}

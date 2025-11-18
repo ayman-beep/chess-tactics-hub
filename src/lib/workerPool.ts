@@ -15,9 +15,8 @@ export class WorkerPool {
   }>();
 
   constructor(poolSize?: number) {
-    // Limit to 4 workers for optimal stability
-    const maxWorkers = 4;
-    const workerCount = poolSize || Math.min(maxWorkers, navigator.hardwareConcurrency || 4);
+    // Use all available CPU cores for maximum performance
+    const workerCount = poolSize || navigator.hardwareConcurrency || 4;
     
     console.log(`Initializing ${workerCount} chess analysis workers (optimized for stability)`);
     

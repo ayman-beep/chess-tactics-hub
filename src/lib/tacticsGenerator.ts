@@ -1,6 +1,6 @@
 import { Chess } from 'chess.js';
 import { analyzeTacticalPosition } from './tacticalPatterns';
-import { findBestLine } from './search';
+import { getWorkerPool } from './workerPool';
 
 export interface Tactic {
   fen: string;
@@ -10,115 +10,160 @@ export interface Tactic {
   evaluation: number;
 }
 
-export const generateTactics = async (games: any[], onProgress?: (progress: number, status: string) => void): Promise<Tactic[]> => {
+export const generateTactics = async (
+  games: any[],
+  onProgress?: (progress: number, status: string) => void
+): Promise<Tactic[]> => {
   const tactics: Tactic[] = [];
   const seenPositions = new Set<string>();
+  const workerPool = getWorkerPool();
 
-  console.log('Starting tactics generation from', games.length, 'games');
+  console.log('Starting parallel tactics generation from', games.length, 'games');
+  console.log('Worker pool:', workerPool.getStatus());
 
-  if (onProgress) onProgress(0, 'Analyzing games...');
+  // Collect all positions to analyze
+  const positionsToAnalyze: Array<{
+    fenBefore: string;
+    actualMove: any;
+    gameUrl: string;
+    gameIndex: number;
+    moveIndex: number;
+  }> = [];
 
-  for (let gameIndex = 0; gameIndex < games.length; gameIndex++) {
-    const game = games[gameIndex];
+  let totalMoves = 0;
+
+  games.forEach((game, gameIndex) => {
     try {
       const chess = new Chess();
       chess.loadPgn(game.pgn);
 
       const history = chess.history({ verbose: true });
-      console.log(`Game ${gameIndex + 1}: Analyzing ${history.length} moves`);
+      totalMoves += history.length;
 
-      // Only analyze positions after the opening (move 10+)
       for (let i = 10; i < history.length - 4; i++) {
         chess.reset();
 
-        // Replay to the position BEFORE the tactical move
         for (let j = 0; j < i; j++) {
           chess.move(history[j]);
         }
 
         const fenBefore = chess.fen();
 
-        // Skip if we've seen this position
-        if (seenPositions.has(fenBefore)) continue;
-
-        const actualMove = history[i];
-
-        // Find the best continuation with search
-        const bestContinuation = findBestLine(new Chess(fenBefore), 6);
-
-        // Check if the actual move matches the engine's top choice
-        const engineTopMove = bestContinuation.moves[0];
-
-        if (!engineTopMove || engineTopMove.san !== actualMove.san) {
-          continue;
+        if (!seenPositions.has(fenBefore)) {
+          positionsToAnalyze.push({
+            fenBefore,
+            actualMove: history[i],
+            gameUrl: game.url,
+            gameIndex,
+            moveIndex: i
+          });
+          seenPositions.add(fenBefore);
         }
+      }
+    } catch (error) {
+      console.error('Error processing game:', error);
+    }
+  });
 
-        // Analyze if this is truly a tactical position
-        const tacticalInfo = analyzeTacticalPosition(
-          new Chess(fenBefore),
-          actualMove,
-          bestContinuation.moves.slice(1, 4)
+  console.log(`Found ${positionsToAnalyze.length} unique positions to analyze`);
+
+  if (onProgress) {
+    onProgress(5, `Found ${positionsToAnalyze.length} positions. Analyzing with ${workerPool.getStatus().totalWorkers} CPU cores...`);
+  }
+
+  // Analyze all positions in parallel using worker pool
+  const analysisResults: any[] = [];
+  const analysisPromises: Promise<any>[] = [];
+
+  positionsToAnalyze.forEach((pos, index) => {
+    const promise = workerPool.analyze(pos.fenBefore, 8).then(result => {
+      const progress = 5 + ((index + 1) / positionsToAnalyze.length) * 80;
+      const gamePercent = ((pos.moveIndex / (totalMoves / games.length)) * 100).toFixed(1);
+
+      if (onProgress) {
+        onProgress(
+          progress,
+          `Analyzed ${index + 1}/${positionsToAnalyze.length} positions (Game ${pos.gameIndex + 1}: ${gamePercent}% done)`
         );
+      }
 
-        // Only accept high-quality tactics with significant evaluation swing
-        if (tacticalInfo.isTactical && tacticalInfo.evalSwing > 300) {
-          const solution: string[] = [];
-          const solutionChess = new Chess(fenBefore);
+      return {
+        ...pos,
+        bestContinuation: result
+      };
+    }).catch(error => {
+      console.error(`Analysis error at position ${index}:`, error);
+      return null;
+    });
 
-          // Build the solution from the engine's best line
-          for (let k = 0; k < Math.min(5, bestContinuation.moves.length); k++) {
-            const move = bestContinuation.moves[k];
-            if (move) {
-              try {
-                solutionChess.move(move);
-                solution.push(move.san);
-              } catch {
-                break;
-              }
-            }
+    analysisPromises.push(promise);
+  });
+
+  // Wait for all analyses to complete
+  const results = await Promise.all(analysisPromises);
+  analysisResults.push(...results);
+
+  if (onProgress) {
+    onProgress(90, 'Filtering high-quality tactics...');
+  }
+
+  // Process results and extract tactics
+  for (const result of analysisResults) {
+    if (!result || !result.bestContinuation) continue;
+
+    const { fenBefore, actualMove, gameUrl, bestContinuation } = result;
+
+    const engineTopMove = bestContinuation.moves[0];
+
+    if (!engineTopMove || engineTopMove.san !== actualMove.san) {
+      continue;
+    }
+
+    const tacticalInfo = analyzeTacticalPosition(
+      new Chess(fenBefore),
+      actualMove,
+      bestContinuation.moves.slice(1, 4)
+    );
+
+    if (tacticalInfo.isTactical && tacticalInfo.evalSwing > 300) {
+      const solution: string[] = [];
+      const solutionChess = new Chess(fenBefore);
+
+      for (let k = 0; k < Math.min(5, bestContinuation.moves.length); k++) {
+        const move = bestContinuation.moves[k];
+        if (move) {
+          try {
+            solutionChess.move(move);
+            solution.push(move.san);
+          } catch {
+            break;
           }
-
-          // Only include if solution is at least 2 moves
-          if (solution.length >= 2) {
-            const evaluation = tacticalInfo.evalSwing / 100;
-
-            tactics.push({
-              fen: fenBefore,
-              solution: solution.slice(0, 5),
-              difficulty: tacticalInfo.difficulty,
-              gameUrl: game.url,
-              evaluation: evaluation
-            });
-
-            seenPositions.add(fenBefore);
-
-            console.log(`Found tactic: ${solution[0]} (${tacticalInfo.difficulty}, eval: ${evaluation.toFixed(1)})`);
-
-            // Limit tactics per game to avoid similar positions
-            if (tactics.length >= 20) break;
-          }
-        }
-
-        if (onProgress) {
-          const progress = 10 + (gameIndex / games.length) * 70 + ((i - 10) / (history.length - 14)) * 20;
-          onProgress(progress, `Analyzed ${tactics.length} tactics so far...`);
         }
       }
 
-      if (tactics.length >= 20) break;
-    } catch (error) {
-      console.error('Error processing game:', error);
+      if (solution.length >= 2) {
+        tactics.push({
+          fen: fenBefore,
+          solution: solution.slice(0, 5),
+          difficulty: tacticalInfo.difficulty,
+          gameUrl: gameUrl,
+          evaluation: tacticalInfo.evalSwing / 100
+        });
+
+        if (tactics.length >= 20) break;
+      }
     }
   }
 
   console.log(`Generated ${tactics.length} total tactics`);
 
-  if (onProgress) onProgress(90, 'Finalizing tactics...');
+  if (onProgress) {
+    onProgress(95, 'Finalizing...');
+  }
 
-  // Sort by evaluation swing (best tactics first) and limit to top 10
+  // Sort by evaluation and get best 10
   tactics.sort((a, b) => b.evaluation - a.evaluation);
 
-  // Ensure variety in difficulty
   const finalTactics: Tactic[] = [];
   const difficultyCount = { easy: 0, medium: 0, hard: 0 };
   const maxPerDifficulty = { easy: 4, medium: 4, hard: 4 };
@@ -132,7 +177,9 @@ export const generateTactics = async (games: any[], onProgress?: (progress: numb
     }
   }
 
-  if (onProgress) onProgress(100, `Complete! Found ${finalTactics.length} high-quality tactics`);
+  if (onProgress) {
+    onProgress(100, `Complete! Found ${finalTactics.length} tactics`);
+  }
 
   console.log('Final tactics:', finalTactics.length, 'Distribution:', difficultyCount);
 
