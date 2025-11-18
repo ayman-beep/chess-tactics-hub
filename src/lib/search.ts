@@ -1,4 +1,4 @@
-import { Chess } from '@chessle/chess.js-extended';
+import { Chess } from 'chess.js';
 import { evaluatePosition } from './evaluation';
 
 const pieceValues: { [key: string]: number } = {

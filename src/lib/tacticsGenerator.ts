@@ -1,4 +1,4 @@
-import { Chess } from '@chessle/chess.js-extended';
+import { Chess } from 'chess.js';
 import { findBestLine } from './search';
 import { analyzeTacticalPosition } from './tacticalPatterns';
 

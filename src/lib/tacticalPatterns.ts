@@ -1,4 +1,4 @@
-import { Chess } from '@chessle/chess.js-extended';
+import { Chess } from 'chess.js';
 import { evaluatePosition } from './evaluation';
 
 export type TacticalPattern = 'fork' | 'pin' | 'skewer' | 'discovered-attack' | 'sacrifice' | 'mate-threat' | 'forcing';
