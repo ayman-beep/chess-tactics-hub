@@ -1,4 +1,4 @@
-import { Chess } from 'chess.js';
+import { Chess } from '@chessle/chess.js-extended';
 import { findBestLine } from './search';
 import { analyzeTacticalPosition } from './tacticalPatterns';
 
@@ -40,8 +40,8 @@ export const generateTactics = (games: any[]): Tactic[] => {
         
         const actualMove = history[i];
         
-        // Find the best continuation with deep search (8 ply minimum)
-        const bestContinuation = findBestLine(new Chess(fenBefore), 8);
+        // Find the best continuation with deep search (12 ply for high quality)
+        const bestContinuation = findBestLine(new Chess(fenBefore), 12);
         
         // Check if the actual move matches or is close to the engine's top choice
         const engineTopMove = bestContinuation.moves[0];

@@ -1,4 +1,4 @@
-import { Chess, Square } from 'chess.js';
+import { Chess, Square } from '@chessle/chess.js-extended';
 
 const pieceValues: { [key: string]: number } = {
   p: 100, n: 320, b: 330, r: 500, q: 900, k: 20000
