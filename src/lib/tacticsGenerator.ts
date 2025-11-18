@@ -65,27 +65,49 @@ export const generateTactics = async (games: any[], onProgress?: (progress: numb
   
   if (onProgress) onProgress(5, `Analyzing ${positionsToAnalyze.length} positions with ${workerPool.getStatus().totalWorkers} CPU cores...`);
   
-  // Analyze all positions in parallel using worker pool
-  const analysisPromises = positionsToAnalyze.map(async (pos, index) => {
-    try {
-      const result = await workerPool.analyze(pos.fenBefore, 10);
-      
-      if (onProgress && index % 10 === 0) {
-        const progress = 5 + (index / positionsToAnalyze.length) * 85;
-        onProgress(progress, `Analyzed ${index}/${positionsToAnalyze.length} positions...`);
-      }
-      
-      return {
-        ...pos,
-        bestContinuation: result
-      };
-    } catch (error) {
-      console.error('Analysis error:', error);
-      return null;
-    }
-  });
+  // Analyze positions in smaller batches to prevent overwhelming the worker pool
+  const BATCH_SIZE = 12; // Process 12 positions at a time
+  const analysisResults: any[] = [];
   
-  const analysisResults = await Promise.all(analysisPromises);
+  for (let batchStart = 0; batchStart < positionsToAnalyze.length; batchStart += BATCH_SIZE) {
+    const batchEnd = Math.min(batchStart + BATCH_SIZE, positionsToAnalyze.length);
+    const batch = positionsToAnalyze.slice(batchStart, batchEnd);
+    
+    console.log(`Processing batch ${batchStart / BATCH_SIZE + 1}: positions ${batchStart + 1}-${batchEnd}`);
+    
+    const batchPromises = batch.map(async (pos, batchIndex) => {
+      const globalIndex = batchStart + batchIndex;
+      
+      try {
+        // Add timeout to prevent stuck workers
+        const analysisPromise = workerPool.analyze(pos.fenBefore, 8); // Reduced to depth 8 for speed
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Analysis timeout')), 15000) // 15 second timeout
+        );
+        
+        const result = await Promise.race([analysisPromise, timeoutPromise]);
+        
+        const progress = 5 + ((globalIndex + 1) / positionsToAnalyze.length) * 85;
+        if (onProgress) {
+          onProgress(progress, `Analyzed ${globalIndex + 1}/${positionsToAnalyze.length} positions...`);
+        }
+        
+        return {
+          ...pos,
+          bestContinuation: result
+        };
+      } catch (error) {
+        console.error(`Analysis error at position ${globalIndex}:`, error);
+        return null;
+      }
+    });
+    
+    const batchResults = await Promise.all(batchPromises);
+    analysisResults.push(...batchResults);
+    
+    // Small delay between batches to prevent overwhelming the system
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
   
   if (onProgress) onProgress(90, 'Filtering high-quality tactics...');
   
