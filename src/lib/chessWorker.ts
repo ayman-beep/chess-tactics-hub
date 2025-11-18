@@ -1,8 +1,18 @@
 import { Chess } from 'chess.js';
 import { evaluatePosition } from './evaluation';
 
-// Transposition table for caching positions
+// Transposition table for caching positions (limited size to prevent memory overflow)
+const MAX_CACHE_SIZE = 10000;
 const transpositionTable = new Map<string, { score: number; depth: number; bestMove: any }>();
+
+const addToCache = (key: string, value: { score: number; depth: number; bestMove: any }) => {
+  if (transpositionTable.size >= MAX_CACHE_SIZE) {
+    // Remove oldest entry (first entry in Map)
+    const firstKey = transpositionTable.keys().next().value;
+    transpositionTable.delete(firstKey);
+  }
+  transpositionTable.set(key, value);
+};
 
 const pieceValues: { [key: string]: number } = {
   p: 100, n: 320, b: 330, r: 500, q: 900, k: 20000
@@ -42,8 +52,15 @@ const minimax = (
   alpha: number, 
   beta: number, 
   isMaximizing: boolean,
-  currentLine: any[]
+  currentLine: any[],
+  nodeCount = { value: 0 }
 ): { moves: any[]; score: number } => {
+  
+  // Safety check: limit total nodes searched to prevent infinite loops
+  nodeCount.value++;
+  if (nodeCount.value > 100000) {
+    return { moves: currentLine, score: evaluatePosition(chess) };
+  }
   
   const zobristKey = chess.fen();
   const cached = transpositionTable.get(zobristKey);
@@ -62,7 +79,7 @@ const minimax = (
   let bestLine = { moves: currentLine, score: isMaximizing ? -Infinity : Infinity };
   let bestMove = null;
   
-  const searchWidth = depth > 8 ? Math.min(25, orderedMoves.length) : orderedMoves.length;
+  const searchWidth = depth > 6 ? Math.min(15, orderedMoves.length) : orderedMoves.length;
   
   for (let i = 0; i < searchWidth; i++) {
     const move = orderedMoves[i];
@@ -74,7 +91,8 @@ const minimax = (
       alpha, 
       beta, 
       !isMaximizing, 
-      [...currentLine, move]
+      [...currentLine, move],
+      nodeCount
     );
     
     chess.undo();
@@ -99,7 +117,7 @@ const minimax = (
   }
   
   if (bestMove) {
-    transpositionTable.set(zobristKey, { 
+    addToCache(zobristKey, { 
       score: bestLine.score, 
       depth, 
       bestMove 
@@ -118,7 +136,8 @@ self.onmessage = (e: MessageEvent) => {
     const chess = new Chess(fen);
     
     try {
-      const result = minimax(chess, depth, -Infinity, Infinity, chess.turn() === 'w', []);
+      const nodeCount = { value: 0 };
+      const result = minimax(chess, depth, -Infinity, Infinity, chess.turn() === 'w', [], nodeCount);
       
       self.postMessage({
         type: 'result',
@@ -126,10 +145,12 @@ self.onmessage = (e: MessageEvent) => {
           id,
           moves: result.moves,
           score: result.score,
-          fen
+          fen,
+          nodesSearched: nodeCount.value
         }
       });
     } catch (error) {
+      console.error('Worker analysis error:', error);
       self.postMessage({
         type: 'error',
         data: {
