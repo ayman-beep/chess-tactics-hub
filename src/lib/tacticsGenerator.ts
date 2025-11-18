@@ -68,7 +68,7 @@ export const generateTactics = async (games: any[], onProgress?: (progress: numb
   // Analyze all positions in parallel using worker pool
   const analysisPromises = positionsToAnalyze.map(async (pos, index) => {
     try {
-      const result = await workerPool.analyze(pos.fenBefore, 12);
+      const result = await workerPool.analyze(pos.fenBefore, 10);
       
       if (onProgress && index % 10 === 0) {
         const progress = 5 + (index / positionsToAnalyze.length) * 85;

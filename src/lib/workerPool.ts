@@ -15,10 +15,11 @@ export class WorkerPool {
   }>();
 
   constructor(poolSize?: number) {
-    // Use number of CPU cores or default to 8
-    const workerCount = poolSize || navigator.hardwareConcurrency || 8;
+    // Limit to 6 workers max to prevent memory issues, regardless of CPU cores
+    const maxWorkers = 6;
+    const workerCount = poolSize || Math.min(maxWorkers, navigator.hardwareConcurrency || 4);
     
-    console.log(`Initializing ${workerCount} chess analysis workers`);
+    console.log(`Initializing ${workerCount} chess analysis workers (limited for stability)`);
     
     for (let i = 0; i < workerCount; i++) {
       const worker = new Worker(

@@ -109,7 +109,7 @@ const Index = () => {
               />
             </div>
             <p className="text-xs text-muted-foreground text-center">
-              Using {navigator.hardwareConcurrency || 8} CPU cores for parallel analysis
+              Using {Math.min(6, navigator.hardwareConcurrency || 4)} worker threads for stable parallel analysis
             </p>
           </div>
         )}
