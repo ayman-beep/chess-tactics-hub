@@ -1,44 +1,41 @@
 import { Chess } from 'chess.js';
 import { evaluatePosition } from './evaluation';
 
-// Transposition table for caching positions (limited size to prevent memory overflow)
-const MAX_CACHE_SIZE = 10000;
-const transpositionTable = new Map<string, { score: number; depth: number; bestMove: any }>();
+// Simple cache with size limit
+const MAX_CACHE_SIZE = 5000;
+const cache = new Map<string, { score: number; depth: number }>();
 
-const addToCache = (key: string, value: { score: number; depth: number; bestMove: any }) => {
-  if (transpositionTable.size >= MAX_CACHE_SIZE) {
-    // Remove oldest entry (first entry in Map)
-    const firstKey = transpositionTable.keys().next().value;
-    transpositionTable.delete(firstKey);
+const addToCache = (key: string, score: number, depth: number) => {
+  if (cache.size >= MAX_CACHE_SIZE) {
+    const firstKey = cache.keys().next().value;
+    cache.delete(firstKey);
   }
-  transpositionTable.set(key, value);
+  cache.set(key, { score, depth });
 };
 
 const pieceValues: { [key: string]: number } = {
-  p: 100, n: 320, b: 330, r: 500, q: 900, k: 20000
+  p: 1, n: 3, b: 3, r: 5, q: 9, k: 0
 };
 
 const orderMoves = (chess: Chess, moves: any[]): any[] => {
   return moves.map(move => {
     let score = 0;
     
+    // Prioritize captures
     if (move.captured) {
-      score += pieceValues[move.captured] * 10 - pieceValues[move.piece];
+      score += (pieceValues[move.captured] || 0) * 10 - (pieceValues[move.piece] || 0);
     }
     
+    // Prioritize checks
     chess.move(move);
-    if (chess.inCheck()) {
-      score += 1000;
-    }
+    if (chess.inCheck()) score += 50;
     chess.undo();
     
-    if (move.promotion) {
-      score += pieceValues[move.promotion];
-    }
+    // Prioritize promotions
+    if (move.promotion) score += 80;
     
-    if (['e4', 'e5', 'd4', 'd5'].includes(move.to)) {
-      score += 50;
-    }
+    // Center control
+    if (['e4', 'e5', 'd4', 'd5'].includes(move.to)) score += 10;
     
     return { move, score };
   })
@@ -52,82 +49,72 @@ const minimax = (
   alpha: number, 
   beta: number, 
   isMaximizing: boolean,
-  currentLine: any[],
-  nodeCount = { value: 0 }
+  nodeCount: { value: number }
 ): { moves: any[]; score: number } => {
   
-  // Safety check: limit total nodes searched to prevent infinite loops
+  // Safety limits
   nodeCount.value++;
-  if (nodeCount.value > 100000) {
-    return { moves: currentLine, score: Number(evaluatePosition(chess)) };
+  if (nodeCount.value > 50000) {
+    return { moves: [], score: 0 };
   }
   
-  const zobristKey = chess.fen();
-  const cached = transpositionTable.get(zobristKey);
+  const fen = chess.fen();
+  const cached = cache.get(fen);
   if (cached && cached.depth >= depth) {
-    return { moves: currentLine, score: Number(cached.score) };
+    return { moves: [], score: cached.score };
   }
   
+  // Base case
   if (depth === 0 || chess.isGameOver()) {
-    const score = Number(evaluatePosition(chess));
-    return { moves: currentLine, score };
+    const score = evaluatePosition(chess);
+    // Ensure it's a plain number
+    const safeScore = Math.round(Number(score) || 0);
+    addToCache(fen, safeScore, 0);
+    return { moves: [], score: safeScore };
   }
   
   const moves = chess.moves({ verbose: true });
+  if (moves.length === 0) {
+    return { moves: [], score: 0 };
+  }
+  
   const orderedMoves = orderMoves(chess, moves);
+  const searchWidth = depth > 4 ? Math.min(12, orderedMoves.length) : orderedMoves.length;
   
-  let bestLine = { moves: currentLine, score: isMaximizing ? -Infinity : Infinity };
-  let bestMove = null;
-  
-  const searchWidth = depth > 6 ? Math.min(15, orderedMoves.length) : orderedMoves.length;
+  let bestScore = isMaximizing ? -999999 : 999999;
+  let bestLine: any[] = [];
   
   for (let i = 0; i < searchWidth; i++) {
     const move = orderedMoves[i];
     chess.move(move);
     
-    const result = minimax(
-      chess, 
-      depth - 1, 
-      alpha, 
-      beta, 
-      !isMaximizing, 
-      [...currentLine, move],
-      nodeCount
-    );
-    
+    const result = minimax(chess, depth - 1, alpha, beta, !isMaximizing, nodeCount);
     chess.undo();
     
-    // Ensure score is a regular number, not BigInt
-    const resultScore = Number(result.score);
+    // Ensure safe number arithmetic
+    const resultScore = Math.round(Number(result.score) || 0);
     
     if (isMaximizing) {
-      if (resultScore > bestLine.score) {
-        bestLine = { moves: result.moves, score: resultScore };
-        bestMove = move;
+      if (resultScore > bestScore) {
+        bestScore = resultScore;
+        bestLine = [move, ...result.moves];
       }
       alpha = Math.max(alpha, resultScore);
     } else {
-      if (resultScore < bestLine.score) {
-        bestLine = { moves: result.moves, score: resultScore };
-        bestMove = move;
+      if (resultScore < bestScore) {
+        bestScore = resultScore;
+        bestLine = [move, ...result.moves];
       }
       beta = Math.min(beta, resultScore);
     }
     
-    if (beta <= alpha) {
-      break;
-    }
+    // Alpha-beta pruning
+    if (beta <= alpha) break;
   }
   
-  if (bestMove) {
-    addToCache(zobristKey, { 
-      score: Number(bestLine.score), 
-      depth, 
-      bestMove 
-    });
-  }
+  addToCache(fen, bestScore, depth);
   
-  return { moves: bestLine.moves, score: Number(bestLine.score) };
+  return { moves: bestLine, score: bestScore };
 };
 
 // Worker message handler
@@ -136,34 +123,42 @@ self.onmessage = (e: MessageEvent) => {
   
   if (type === 'analyze') {
     const { fen, depth, id } = data;
-    const chess = new Chess(fen);
     
     try {
+      const chess = new Chess(fen);
       const nodeCount = { value: 0 };
-      const result = minimax(chess, depth, -Infinity, Infinity, chess.turn() === 'w', [], nodeCount);
+      
+      const result = minimax(
+        chess, 
+        Math.min(depth, 8), // Cap depth at 8 for stability
+        -999999, 
+        999999, 
+        chess.turn() === 'w', 
+        nodeCount
+      );
       
       self.postMessage({
         type: 'result',
         data: {
           id,
-          moves: result.moves,
-          score: Number(result.score),
+          moves: result.moves.slice(0, 10),
+          score: Math.round(Number(result.score) || 0),
           fen,
           nodesSearched: nodeCount.value
         }
       });
     } catch (error) {
-      console.error('Worker analysis error:', error);
+      console.error('Worker error:', error);
       self.postMessage({
         type: 'error',
         data: {
           id,
-          error: error instanceof Error ? error.message : 'Unknown error'
+          error: error instanceof Error ? error.message : 'Analysis failed'
         }
       });
     }
   } else if (type === 'clear-cache') {
-    transpositionTable.clear();
+    cache.clear();
     self.postMessage({ type: 'cache-cleared' });
   }
 };
