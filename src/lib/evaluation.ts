@@ -1,7 +1,7 @@
 import { Chess, Square } from 'chess.js';
 
 const pieceValues: { [key: string]: number } = {
-  p: 100, n: 320, b: 330, r: 500, q: 900, k: 20000
+  p: 100, n: 320, b: 330, r: 500, q: 900, k: 10000
 };
 
 // Piece-square tables for positional evaluation
@@ -89,7 +89,7 @@ const getSquareIndex = (square: Square, color: 'w' | 'b'): number => {
 
 export const evaluatePosition = (chess: Chess): number => {
   if (chess.isCheckmate()) {
-    return chess.turn() === 'w' ? -30000 : 30000;
+    return chess.turn() === 'w' ? -10000 : 10000;
   }
   
   if (chess.isDraw() || chess.isStalemate() || chess.isThreefoldRepetition()) {
@@ -133,7 +133,8 @@ export const evaluatePosition = (chess: Chess): number => {
   const pawnStructureScore = evaluatePawnStructure(chess);
   score += pawnStructureScore;
   
-  return score;
+  // Ensure we return a safe integer
+  return Math.round(Number(score) || 0);
 };
 
 const evaluatePawnStructure = (chess: Chess): number => {
