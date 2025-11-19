@@ -15,8 +15,8 @@ export class WorkerPool {
   }>();
 
   constructor(poolSize?: number) {
-    // Use all available CPU cores for maximum performance
-    const workerCount = poolSize || navigator.hardwareConcurrency || 4;
+    // Use limited workers for stability
+    const workerCount = poolSize || Math.min(navigator.hardwareConcurrency || 2, 2);
     
     console.log(`Initializing ${workerCount} chess analysis workers (optimized for stability)`);
     
