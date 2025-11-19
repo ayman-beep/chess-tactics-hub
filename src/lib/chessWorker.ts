@@ -59,17 +59,17 @@ const minimax = (
   // Safety check: limit total nodes searched to prevent infinite loops
   nodeCount.value++;
   if (nodeCount.value > 100000) {
-    return { moves: currentLine, score: evaluatePosition(chess) };
+    return { moves: currentLine, score: Number(evaluatePosition(chess)) };
   }
   
   const zobristKey = chess.fen();
   const cached = transpositionTable.get(zobristKey);
   if (cached && cached.depth >= depth) {
-    return { moves: currentLine, score: cached.score };
+    return { moves: currentLine, score: Number(cached.score) };
   }
   
   if (depth === 0 || chess.isGameOver()) {
-    const score = evaluatePosition(chess);
+    const score = Number(evaluatePosition(chess));
     return { moves: currentLine, score };
   }
   
@@ -97,18 +97,21 @@ const minimax = (
     
     chess.undo();
     
+    // Ensure score is a regular number, not BigInt
+    const resultScore = Number(result.score);
+    
     if (isMaximizing) {
-      if (result.score > bestLine.score) {
-        bestLine = result;
+      if (resultScore > bestLine.score) {
+        bestLine = { moves: result.moves, score: resultScore };
         bestMove = move;
       }
-      alpha = Math.max(alpha, result.score);
+      alpha = Math.max(alpha, resultScore);
     } else {
-      if (result.score < bestLine.score) {
-        bestLine = result;
+      if (resultScore < bestLine.score) {
+        bestLine = { moves: result.moves, score: resultScore };
         bestMove = move;
       }
-      beta = Math.min(beta, result.score);
+      beta = Math.min(beta, resultScore);
     }
     
     if (beta <= alpha) {
@@ -118,13 +121,13 @@ const minimax = (
   
   if (bestMove) {
     addToCache(zobristKey, { 
-      score: bestLine.score, 
+      score: Number(bestLine.score), 
       depth, 
       bestMove 
     });
   }
   
-  return bestLine;
+  return { moves: bestLine.moves, score: Number(bestLine.score) };
 };
 
 // Worker message handler
@@ -144,7 +147,7 @@ self.onmessage = (e: MessageEvent) => {
         data: {
           id,
           moves: result.moves,
-          score: result.score,
+          score: Number(result.score),
           fen,
           nodesSearched: nodeCount.value
         }
