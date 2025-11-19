@@ -52,9 +52,9 @@ const minimax = (
   nodeCount: { value: number }
 ): { moves: any[]; score: number } => {
   
-  // Safety limits
+  // Very strict safety limits
   nodeCount.value++;
-  if (nodeCount.value > 50000) {
+  if (nodeCount.value > 10000) {
     return { moves: [], score: 0 };
   }
   
@@ -67,8 +67,7 @@ const minimax = (
   // Base case
   if (depth === 0 || chess.isGameOver()) {
     const score = evaluatePosition(chess);
-    // Ensure it's a plain number
-    const safeScore = Math.round(Number(score) || 0);
+    const safeScore = Math.min(Math.max(Math.floor(score), -9999), 9999);
     addToCache(fen, safeScore, 0);
     return { moves: [], score: safeScore };
   }
@@ -78,38 +77,42 @@ const minimax = (
     return { moves: [], score: 0 };
   }
   
+  // Drastically limit search width
   const orderedMoves = orderMoves(chess, moves);
-  const searchWidth = depth > 4 ? Math.min(12, orderedMoves.length) : orderedMoves.length;
+  const searchWidth = Math.min(8, orderedMoves.length);
   
-  let bestScore = isMaximizing ? -999999 : 999999;
+  let bestScore = isMaximizing ? -9999 : 9999;
   let bestLine: any[] = [];
   
   for (let i = 0; i < searchWidth; i++) {
     const move = orderedMoves[i];
-    chess.move(move);
     
-    const result = minimax(chess, depth - 1, alpha, beta, !isMaximizing, nodeCount);
-    chess.undo();
-    
-    // Ensure safe number arithmetic
-    const resultScore = Math.round(Number(result.score) || 0);
-    
-    if (isMaximizing) {
-      if (resultScore > bestScore) {
-        bestScore = resultScore;
-        bestLine = [move, ...result.moves];
+    try {
+      chess.move(move);
+      const result = minimax(chess, depth - 1, alpha, beta, !isMaximizing, nodeCount);
+      chess.undo();
+      
+      const resultScore = Math.min(Math.max(Math.floor(result.score), -9999), 9999);
+      
+      if (isMaximizing) {
+        if (resultScore > bestScore) {
+          bestScore = resultScore;
+          bestLine = [move, ...result.moves];
+        }
+        alpha = Math.max(alpha, resultScore);
+      } else {
+        if (resultScore < bestScore) {
+          bestScore = resultScore;
+          bestLine = [move, ...result.moves];
+        }
+        beta = Math.min(beta, resultScore);
       }
-      alpha = Math.max(alpha, resultScore);
-    } else {
-      if (resultScore < bestScore) {
-        bestScore = resultScore;
-        bestLine = [move, ...result.moves];
-      }
-      beta = Math.min(beta, resultScore);
+      
+      if (beta <= alpha) break;
+    } catch (error) {
+      // Skip problematic moves
+      continue;
     }
-    
-    // Alpha-beta pruning
-    if (beta <= alpha) break;
   }
   
   addToCache(fen, bestScore, depth);
@@ -128,11 +131,14 @@ self.onmessage = (e: MessageEvent) => {
       const chess = new Chess(fen);
       const nodeCount = { value: 0 };
       
+      // Cap depth at 5 for stability
+      const safeDepth = Math.min(Math.max(depth, 1), 5);
+      
       const result = minimax(
         chess, 
-        Math.min(depth, 8), // Cap depth at 8 for stability
-        -999999, 
-        999999, 
+        safeDepth,
+        -9999, 
+        9999, 
         chess.turn() === 'w', 
         nodeCount
       );
@@ -141,24 +147,22 @@ self.onmessage = (e: MessageEvent) => {
         type: 'result',
         data: {
           id,
-          moves: result.moves.slice(0, 10),
-          score: Math.round(Number(result.score) || 0),
+          moves: result.moves.slice(0, 8),
+          score: Math.floor(result.score),
           fen,
           nodesSearched: nodeCount.value
         }
       });
     } catch (error) {
-      console.error('Worker error:', error);
       self.postMessage({
         type: 'error',
         data: {
           id,
-          error: error instanceof Error ? error.message : 'Analysis failed'
+          error: 'Analysis failed'
         }
       });
     }
   } else if (type === 'clear-cache') {
     cache.clear();
-    self.postMessage({ type: 'cache-cleared' });
   }
 };
