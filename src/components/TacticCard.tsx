@@ -12,9 +12,10 @@ interface TacticCardProps {
   gameUrl: string;
   index: number;
   evaluation: number;
+  playerSide: 'w' | 'b';
 }
 
-export const TacticCard = ({ fen, solution, difficulty, gameUrl, index, evaluation }: TacticCardProps) => {
+export const TacticCard = ({ fen, solution, difficulty, gameUrl, index, evaluation, playerSide }: TacticCardProps) => {
   const [attempts, setAttempts] = useState(0);
   const [solved, setSolved] = useState(false);
 
@@ -33,6 +34,11 @@ export const TacticCard = ({ fen, solution, difficulty, gameUrl, index, evaluati
     const chess = new Chess(fen);
     const board = chess.board();
     
+    // Flip board if playing as black
+    const displayBoard = playerSide === 'w' ? board : [...board].reverse();
+    const files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+    const displayFiles = playerSide === 'w' ? files : [...files].reverse();
+    
     // Use proper Unicode symbols - white pieces (filled) vs black pieces (outlined)
     const pieceSymbols: { [key: string]: string } = {
       'p': '♟︎', 'n': '♞', 'b': '♝', 'r': '♜', 'q': '♛', 'k': '♚',  // Black pieces
@@ -41,7 +47,7 @@ export const TacticCard = ({ fen, solution, difficulty, gameUrl, index, evaluati
 
     return (
       <div className="grid grid-cols-8 gap-0 w-full max-w-[320px] mx-auto border-2 border-border rounded-lg overflow-hidden shadow-lg">
-        {board.map((row, i) =>
+        {displayBoard.map((row, i) =>
           row.map((square, j) => {
             const isLight = (i + j) % 2 === 0;
             const isWhitePiece = square && square.color === 'w';
@@ -124,6 +130,7 @@ export const TacticCard = ({ fen, solution, difficulty, gameUrl, index, evaluati
               solution={solution}
               onCorrect={() => setSolved(true)}
               onWrong={() => setAttempts(attempts + 1)}
+              playerSide={playerSide}
             />
           </TabsContent>
         </Tabs>

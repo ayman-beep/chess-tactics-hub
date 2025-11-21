@@ -8,6 +8,7 @@ export interface Tactic {
   difficulty: "easy" | "medium" | "hard";
   gameUrl: string;
   evaluation: number;
+  playerSide: 'w' | 'b';
 }
 
 export const generateTactics = async (
@@ -142,12 +143,16 @@ export const generateTactics = async (
       }
 
       if (solution.length >= 2) {
+        // Determine who should solve: side to move in the position
+        const playerSide = new Chess(fenBefore).turn();
+        
         tactics.push({
           fen: fenBefore,
           solution: solution.slice(0, 5),
           difficulty: tacticalInfo.difficulty,
           gameUrl: gameUrl,
-          evaluation: tacticalInfo.evalSwing / 100
+          evaluation: tacticalInfo.evalSwing / 100,
+          playerSide
         });
 
         if (tactics.length >= 20) break;
