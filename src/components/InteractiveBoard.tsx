@@ -7,9 +7,10 @@ interface InteractiveBoardProps {
   solution: string[];
   onCorrect: () => void;
   onWrong: () => void;
+  playerSide: 'w' | 'b';
 }
 
-export const InteractiveBoard = ({ initialFen, solution, onCorrect, onWrong }: InteractiveBoardProps) => {
+export const InteractiveBoard = ({ initialFen, solution, onCorrect, onWrong, playerSide }: InteractiveBoardProps) => {
   const [chess, setChess] = useState(new Chess(initialFen));
   const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
   const [currentMoveIndex, setCurrentMoveIndex] = useState(0);
@@ -95,17 +96,24 @@ export const InteractiveBoard = ({ initialFen, solution, onCorrect, onWrong }: I
 
   const board = chess.board();
   const files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
-  const ranks = ['8', '7', '6', '5', '4', '3', '2', '1'];
+  
+  // Flip board if playing as black
+  const ranks = playerSide === 'w' 
+    ? ['8', '7', '6', '5', '4', '3', '2', '1']
+    : ['1', '2', '3', '4', '5', '6', '7', '8'];
+  
+  const displayBoard = playerSide === 'w' ? board : [...board].reverse();
+  const displayFiles = playerSide === 'w' ? files : [...files].reverse();
 
   return (
     <div className="space-y-4">
       <div className="text-center font-medium">{message}</div>
       
       <div className="grid grid-cols-8 gap-0 w-full max-w-[320px] mx-auto border-2 border-border rounded-lg overflow-hidden shadow-lg">
-        {board.map((row, i) =>
+        {displayBoard.map((row, i) =>
           row.map((square, j) => {
             const isLight = (i + j) % 2 === 0;
-            const squareNotation = `${files[j]}${ranks[i]}`;
+            const squareNotation = `${displayFiles[j]}${ranks[i]}`;
             const isSelected = selectedSquare === squareNotation;
             const isWhitePiece = square && square.color === 'w';
             const piece = square ? pieceSymbols[square.type] : null;
