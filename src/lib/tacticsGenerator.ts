@@ -165,12 +165,17 @@ export const generateTactics = async (
   tactics.sort((a, b) => b.evaluation - a.evaluation);
 
   const finalTactics: Tactic[] = [];
+  const finalPositions = new Set<string>();
   const difficultyCount = { easy: 0, medium: 0, hard: 0 };
   const maxPerDifficulty = { easy: 4, medium: 4, hard: 4 };
 
   for (const tactic of tactics) {
+    // Skip if we've already added this exact position
+    if (finalPositions.has(tactic.fen)) continue;
+    
     if (difficultyCount[tactic.difficulty] < maxPerDifficulty[tactic.difficulty]) {
       finalTactics.push(tactic);
+      finalPositions.add(tactic.fen);
       difficultyCount[tactic.difficulty]++;
 
       if (finalTactics.length >= 10) break;
