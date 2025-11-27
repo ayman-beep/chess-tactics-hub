@@ -77,7 +77,7 @@ export const generateTactics = async (
   const analysisPromises: Promise<any>[] = [];
 
   positionsToAnalyze.forEach((pos, index) => {
-    const promise = workerPool.analyze(pos.fenBefore, 4).then(result => {
+    const promise = workerPool.analyze(pos.fenBefore, 15).then(result => {
       const progress = 5 + ((index + 1) / positionsToAnalyze.length) * 80;
       const gamePercent = ((pos.moveIndex / (totalMoves / games.length)) * 100).toFixed(1);
 

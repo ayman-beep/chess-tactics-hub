@@ -1,156 +1,162 @@
 import { Chess } from 'chess.js';
-import { evaluatePosition } from './evaluation';
 
-// Simple cache with size limit
-const MAX_CACHE_SIZE = 5000;
-const cache = new Map<string, { score: number; depth: number }>();
+let stockfish: any = null;
+let analysisQueue: Map<string, {
+  resolve: (result: any) => void;
+  reject: (error: any) => void;
+  depth: number;
+}> = new Map();
 
-const addToCache = (key: string, score: number, depth: number) => {
-  if (cache.size >= MAX_CACHE_SIZE) {
-    const firstKey = cache.keys().next().value;
-    cache.delete(firstKey);
+let currentAnalysisId: string | null = null;
+let bestMove: string = '';
+let score: number = 0;
+let pv: string[] = [];
+
+// Initialize Stockfish
+const initStockfish = async () => {
+  if (stockfish) return;
+  
+  try {
+    // @ts-ignore - Stockfish module
+    const Stockfish = await import('stockfish');
+    stockfish = Stockfish.default ? Stockfish.default() : Stockfish();
+    
+    stockfish.onmessage = (line: string) => {
+      handleStockfishMessage(line);
+    };
+    
+    // Initialize engine
+    stockfish.postMessage('uci');
+    stockfish.postMessage('setoption name Threads value 1');
+    stockfish.postMessage('setoption name Hash value 64');
+    stockfish.postMessage('isready');
+  } catch (error) {
+    console.error('Failed to initialize Stockfish:', error);
   }
-  cache.set(key, { score, depth });
 };
 
-const pieceValues: { [key: string]: number } = {
-  p: 1, n: 3, b: 3, r: 5, q: 9, k: 0
-};
-
-const orderMoves = (chess: Chess, moves: any[]): any[] => {
-  return moves.map(move => {
-    let score = 0;
+const handleStockfishMessage = (line: string) => {
+  if (!currentAnalysisId) return;
+  
+  // Parse best move and score from UCI output
+  if (line.includes('info') && line.includes('depth') && line.includes('score')) {
+    const depthMatch = line.match(/depth (\d+)/);
+    const scoreMatch = line.match(/score cp (-?\d+)/);
+    const mateMatch = line.match(/score mate (-?\d+)/);
+    const pvMatch = line.match(/pv (.+)/);
     
-    // Prioritize captures
-    if (move.captured) {
-      score += (pieceValues[move.captured] || 0) * 10 - (pieceValues[move.piece] || 0);
-    }
-    
-    // Prioritize checks
-    chess.move(move);
-    if (chess.inCheck()) score += 50;
-    chess.undo();
-    
-    // Prioritize promotions
-    if (move.promotion) score += 80;
-    
-    // Center control
-    if (['e4', 'e5', 'd4', 'd5'].includes(move.to)) score += 10;
-    
-    return { move, score };
-  })
-  .sort((a, b) => b.score - a.score)
-  .map(item => item.move);
-};
-
-const minimax = (
-  chess: Chess, 
-  depth: number, 
-  alpha: number, 
-  beta: number, 
-  isMaximizing: boolean,
-  nodeCount: { value: number }
-): { moves: any[]; score: number } => {
-  
-  // Very strict safety limits
-  nodeCount.value++;
-  if (nodeCount.value > 10000) {
-    return { moves: [], score: 0 };
-  }
-  
-  const fen = chess.fen();
-  const cached = cache.get(fen);
-  if (cached && cached.depth >= depth) {
-    return { moves: [], score: cached.score };
-  }
-  
-  // Base case
-  if (depth === 0 || chess.isGameOver()) {
-    const score = evaluatePosition(chess);
-    const safeScore = Math.min(Math.max(Math.floor(score), -9999), 9999);
-    addToCache(fen, safeScore, 0);
-    return { moves: [], score: safeScore };
-  }
-  
-  const moves = chess.moves({ verbose: true });
-  if (moves.length === 0) {
-    return { moves: [], score: 0 };
-  }
-  
-  // Drastically limit search width
-  const orderedMoves = orderMoves(chess, moves);
-  const searchWidth = Math.min(8, orderedMoves.length);
-  
-  let bestScore = isMaximizing ? -9999 : 9999;
-  let bestLine: any[] = [];
-  
-  for (let i = 0; i < searchWidth; i++) {
-    const move = orderedMoves[i];
-    
-    try {
-      chess.move(move);
-      const result = minimax(chess, depth - 1, alpha, beta, !isMaximizing, nodeCount);
-      chess.undo();
-      
-      const resultScore = Math.min(Math.max(Math.floor(result.score), -9999), 9999);
-      
-      if (isMaximizing) {
-        if (resultScore > bestScore) {
-          bestScore = resultScore;
-          bestLine = [move, ...result.moves];
-        }
-        alpha = Math.max(alpha, resultScore);
-      } else {
-        if (resultScore < bestScore) {
-          bestScore = resultScore;
-          bestLine = [move, ...result.moves];
-        }
-        beta = Math.min(beta, resultScore);
+    if (depthMatch && (scoreMatch || mateMatch)) {
+      if (mateMatch) {
+        const mateIn = parseInt(mateMatch[1]);
+        score = mateIn > 0 ? 10000 - mateIn : -10000 - mateIn;
+      } else if (scoreMatch) {
+        score = parseInt(scoreMatch[1]);
       }
       
-      if (beta <= alpha) break;
-    } catch (error) {
-      // Skip problematic moves
-      continue;
+      if (pvMatch) {
+        pv = pvMatch[1].trim().split(' ').slice(0, 8);
+      }
     }
   }
   
-  addToCache(fen, bestScore, depth);
+  if (line.startsWith('bestmove')) {
+    const moveMatch = line.match(/bestmove (\S+)/);
+    if (moveMatch) {
+      bestMove = moveMatch[1];
+      completeAnalysis();
+    }
+  }
+};
+
+const completeAnalysis = () => {
+  if (!currentAnalysisId) return;
   
-  return { moves: bestLine, score: bestScore };
+  const analysis = analysisQueue.get(currentAnalysisId);
+  if (analysis) {
+    const chess = new Chess();
+    const moves = pv.map(uciMove => {
+      try {
+        const from = uciMove.substring(0, 2);
+        const to = uciMove.substring(2, 4);
+        const promotion = uciMove.length > 4 ? uciMove[4] : undefined;
+        
+        const move = chess.move({ from, to, promotion });
+        return move;
+      } catch {
+        return null;
+      }
+    }).filter(Boolean);
+    
+    analysis.resolve({
+      moves,
+      score,
+      fen: '',
+      nodesSearched: 0
+    });
+    
+    analysisQueue.delete(currentAnalysisId);
+    currentAnalysisId = null;
+    bestMove = '';
+    score = 0;
+    pv = [];
+    
+    processNextAnalysis();
+  }
+};
+
+const processNextAnalysis = () => {
+  if (currentAnalysisId || analysisQueue.size === 0) return;
+  
+  const nextId = analysisQueue.keys().next().value;
+  if (!nextId) return;
+  
+  const analysis = analysisQueue.get(nextId);
+  if (!analysis) return;
+  
+  currentAnalysisId = nextId;
+  const { depth } = analysis;
+  
+  // Extract FEN from the analysis ID (format: "fen_depth_randomid")
+  const fenPart = nextId.split('_depth_')[0];
+  
+  stockfish.postMessage(`position fen ${fenPart}`);
+  stockfish.postMessage(`go depth ${depth}`);
+};
+
+const analyzePosition = (fen: string, depth: number): Promise<any> => {
+  return new Promise((resolve, reject) => {
+    const id = `${fen}_depth_${depth}_${Math.random()}`;
+    analysisQueue.set(id, { resolve, reject, depth });
+    
+    if (!currentAnalysisId) {
+      processNextAnalysis();
+    }
+  });
 };
 
 // Worker message handler
-self.onmessage = (e: MessageEvent) => {
+self.onmessage = async (e: MessageEvent) => {
   const { type, data } = e.data;
   
   if (type === 'analyze') {
     const { fen, depth, id } = data;
     
     try {
-      const chess = new Chess(fen);
-      const nodeCount = { value: 0 };
+      await initStockfish();
       
-      // Cap depth at 5 for stability
-      const safeDepth = Math.min(Math.max(depth, 1), 5);
+      // Cap depth at 18 for reasonable performance
+      const safeDepth = Math.min(Math.max(depth, 10), 18);
       
-      const result = minimax(
-        chess, 
-        safeDepth,
-        -9999, 
-        9999, 
-        chess.turn() === 'w', 
-        nodeCount
-      );
+      const result = await analyzePosition(fen, safeDepth);
       
       self.postMessage({
         type: 'result',
         data: {
           id,
-          moves: result.moves.slice(0, 8),
-          score: Math.floor(result.score),
+          moves: result.moves,
+          score: result.score,
           fen,
-          nodesSearched: nodeCount.value
+          nodesSearched: 0
         }
       });
     } catch (error) {
@@ -163,6 +169,7 @@ self.onmessage = (e: MessageEvent) => {
       });
     }
   } else if (type === 'clear-cache') {
-    cache.clear();
+    analysisQueue.clear();
+    currentAnalysisId = null;
   }
 };
