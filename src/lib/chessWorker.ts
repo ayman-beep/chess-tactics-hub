@@ -16,22 +16,48 @@ let pv: string[] = [];
 const initStockfish = async () => {
   if (stockfish) return;
   
-  try {
-    // Use Stockfish WASM from CDN
-    stockfish = new Worker('https://cdn.jsdelivr.net/npm/stockfish.js@10.0.2/stockfish.js');
-    
-    stockfish.onmessage = (e: MessageEvent) => {
-      handleStockfishMessage(e.data);
-    };
-    
-    // Initialize engine
-    stockfish.postMessage('uci');
-    stockfish.postMessage('setoption name Threads value 1');
-    stockfish.postMessage('setoption name Hash value 64');
-    stockfish.postMessage('isready');
-  } catch (error) {
-    console.error('Failed to initialize Stockfish:', error);
-  }
+  return new Promise<void>((resolve, reject) => {
+    try {
+      // Use Stockfish.js from CDN (official build)
+      stockfish = new Worker('https://unpkg.com/stockfish.js@10.0.2/stockfish.js');
+      
+      let ready = false;
+      
+      stockfish.onmessage = (e: MessageEvent) => {
+        const msg = e.data;
+        
+        // Handle ready confirmation
+        if (msg === 'readyok' && !ready) {
+          ready = true;
+          console.log('Stockfish initialized successfully');
+          resolve();
+        } else {
+          handleStockfishMessage(msg);
+        }
+      };
+      
+      stockfish.onerror = (error) => {
+        console.error('Stockfish worker error:', error);
+        reject(new Error('Failed to load Stockfish'));
+      };
+      
+      // Initialize engine
+      stockfish.postMessage('uci');
+      stockfish.postMessage('setoption name Threads value 1');
+      stockfish.postMessage('setoption name Hash value 64');
+      stockfish.postMessage('isready');
+      
+      // Timeout after 10 seconds
+      setTimeout(() => {
+        if (!ready) {
+          reject(new Error('Stockfish initialization timeout'));
+        }
+      }, 10000);
+    } catch (error) {
+      console.error('Failed to initialize Stockfish:', error);
+      reject(error);
+    }
+  });
 };
 
 const handleStockfishMessage = (line: string) => {
@@ -159,11 +185,12 @@ self.onmessage = async (e: MessageEvent) => {
         }
       });
     } catch (error) {
+      console.error('Worker analysis error:', error);
       self.postMessage({
         type: 'error',
         data: {
           id,
-          error: 'Analysis failed'
+          error: error instanceof Error ? error.message : 'Analysis failed'
         }
       });
     }
