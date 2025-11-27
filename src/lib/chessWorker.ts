@@ -1,6 +1,6 @@
 import { Chess } from 'chess.js';
 
-let stockfish: any = null;
+let stockfish: Worker | null = null;
 let analysisQueue: Map<string, {
   resolve: (result: any) => void;
   reject: (error: any) => void;
@@ -12,17 +12,16 @@ let bestMove: string = '';
 let score: number = 0;
 let pv: string[] = [];
 
-// Initialize Stockfish
+// Initialize Stockfish from CDN
 const initStockfish = async () => {
   if (stockfish) return;
   
   try {
-    // @ts-ignore - Stockfish module
-    const Stockfish = await import('stockfish');
-    stockfish = Stockfish.default ? Stockfish.default() : Stockfish();
+    // Use Stockfish WASM from CDN
+    stockfish = new Worker('https://cdn.jsdelivr.net/npm/stockfish.js@10.0.2/stockfish.js');
     
-    stockfish.onmessage = (line: string) => {
-      handleStockfishMessage(line);
+    stockfish.onmessage = (e: MessageEvent) => {
+      handleStockfishMessage(e.data);
     };
     
     // Initialize engine
